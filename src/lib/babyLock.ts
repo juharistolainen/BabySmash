@@ -92,8 +92,6 @@ export type NativeBuildInfo = {
   version: string;
   /** Unix seconds. */
   buildTime: number;
-  profile: string;
-  commit: string | null;
   rustc: string;
   target: string;
   tauri: string;

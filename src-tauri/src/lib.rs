@@ -105,8 +105,6 @@ struct BuildInfo {
     version: String,
     /// Unix seconds when build.rs last ran.
     build_time: u64,
-    profile: &'static str,
-    commit: Option<&'static str>,
     rustc: &'static str,
     target: &'static str,
     tauri: &'static str,
@@ -119,13 +117,10 @@ struct BuildInfo {
 #[tauri::command]
 fn app_build_info(app: AppHandle) -> BuildInfo {
     let pkg = app.package_info();
-    let commit = env!("BABYSMASH_GIT_COMMIT");
     BuildInfo {
         name: pkg.name.clone(),
         version: pkg.version.to_string(),
         build_time: env!("BABYSMASH_BUILD_TIME").parse().unwrap_or(0),
-        profile: env!("BABYSMASH_PROFILE"),
-        commit: (!commit.is_empty()).then_some(commit),
         rustc: env!("BABYSMASH_RUSTC_VERSION"),
         target: env!("BABYSMASH_TARGET"),
         tauri: tauri::VERSION,

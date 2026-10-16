@@ -27,7 +27,6 @@ export default defineConfig(() => ({
       svelte: pkgVersion("./node_modules/svelte"),
       kit: pkgVersion("./node_modules/@sveltejs/kit"),
       vite: pkgVersion("./node_modules/vite"),
-      tauriApi: pkgVersion("./node_modules/@tauri-apps/api"),
     }),
   },
 

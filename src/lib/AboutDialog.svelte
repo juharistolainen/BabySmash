@@ -50,8 +50,6 @@
         title: "Build",
         rows: [
           ["Built", built],
-          ["Profile", native.profile],
-          ["Commit", native.commit ?? "unknown"],
           ["Target", native.target],
         ],
       },
@@ -63,7 +61,6 @@
           ["Svelte", fe.svelte],
           ["SvelteKit", fe.kit],
           ["Vite", fe.vite],
-          ["@tauri-apps/api", fe.tauriApi],
         ],
       },
       {

@@ -5,7 +5,6 @@ declare const __FRONTEND_VERSIONS__: {
   svelte: string;
   kit: string;
   vite: string;
-  tauriApi: string;
 };
 
 export const FRONTEND_VERSIONS = __FRONTEND_VERSIONS__;
