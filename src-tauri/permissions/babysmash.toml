@@ -1,0 +1,29 @@
+[[permission]]
+identifier = "allow-set-baby-lock"
+description = "Enable or disable Baby Lock"
+commands.allow = ["set_baby_lock"]
+
+[[permission]]
+identifier = "allow-set-fullscreen"
+description = "Toggle the main window fullscreen state"
+commands.allow = ["set_fullscreen"]
+
+[[permission]]
+identifier = "allow-macos-keyboard-lock-status"
+description = "Read macOS keyboard lock status"
+commands.allow = ["macos_keyboard_lock_status"]
+
+[[permission]]
+identifier = "allow-open-accessibility-settings"
+description = "Open macOS Accessibility privacy settings"
+commands.allow = ["open_accessibility_settings"]
+
+[[set]]
+identifier = "babysmash-commands"
+description = "All BabySmash custom commands"
+permissions = [
+  "allow-set-baby-lock",
+  "allow-set-fullscreen",
+  "allow-macos-keyboard-lock-status",
+  "allow-open-accessibility-settings"
+]

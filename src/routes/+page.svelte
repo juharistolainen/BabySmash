@@ -5,9 +5,14 @@
   import {
     applyBabyLock,
     applyFullscreen,
+    fetchMacosKeyboardLockStatus,
+    isNeedsAccessibility,
     isTauri,
+    lockErrorMessage,
+    openAccessibilitySettings,
     readStoredBabyLock,
     writeStoredBabyLock,
+    type MacosKeyboardLockStatus,
   } from "$lib/babyLock";
 
   const MAX_BURSTS = 40;
@@ -19,7 +24,10 @@
   let status = $state("Press any key — or poke the screen!");
   let unlockProgress = $state(0);
   let error = $state("");
+  let needsAccessibility = $state(false);
+  let lockStatus = $state<MacosKeyboardLockStatus | null>(null);
   let inTauri = $state(false);
+  let statusPoll: ReturnType<typeof setInterval> | null = null;
 
   let unlockTimer: ReturnType<typeof setTimeout> | null = null;
   let unlockStartedAt = 0;
@@ -34,6 +42,11 @@
       fullscreen = true;
       status = "Baby Lock on — hold Esc for 2s to unlock";
     }
+
+    void refreshLockStatus();
+    statusPoll = setInterval(() => {
+      if (babyLocked) void refreshLockStatus();
+    }, 3000);
 
     const onKeyDown = (event: KeyboardEvent) => {
       unlockAudio();
@@ -100,8 +113,36 @@
       window.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("contextmenu", onContext);
       cancelUnlockHold();
+      if (statusPoll) clearInterval(statusPoll);
     };
   });
+
+  async function refreshLockStatus() {
+    const next = await fetchMacosKeyboardLockStatus();
+    lockStatus = next;
+    if (!babyLocked || !next?.supported) return;
+
+    // Accessibility revoked mid-lock: fail open so we don't leave a wedged tap.
+    if (next.armed && !next.accessibilityGranted) {
+      needsAccessibility = true;
+      error =
+        "Accessibility was turned off — Baby Lock released. Re-enable it in System Settings to lock again.";
+      try {
+        await applyBabyLock(false);
+      } catch {
+        // still roll back UI
+      }
+      writeStoredBabyLock(false);
+      babyLocked = false;
+      fullscreen = false;
+      status = "Press any key — or poke the screen!";
+      return;
+    }
+
+    if (next.secureInput) {
+      status = "Another app is blocking keyboard lock (Secure Input)";
+    }
+  }
 
   function spawnBurst(burst: SmashBurst) {
     bursts = [...bursts.slice(-(MAX_BURSTS - 1)), burst];
@@ -144,6 +185,7 @@
 
   async function setLocked(next: boolean) {
     error = "";
+    needsAccessibility = false;
     // Update UI + persistence before native window ops (webview may remount).
     writeStoredBabyLock(next);
     babyLocked = next;
@@ -153,12 +195,28 @@
       : "Unlocked — parent controls are back";
     try {
       await applyBabyLock(next);
+      await refreshLockStatus();
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      const message = lockErrorMessage(e);
+      needsAccessibility = next && isNeedsAccessibility(e);
+      error = needsAccessibility
+        ? "macOS Accessibility permission is required so Baby Lock can block Spotlight, Mission Control, and quit shortcuts."
+        : message;
       // Roll back UI if the shell rejected the lock change.
       writeStoredBabyLock(!next);
       babyLocked = !next;
       fullscreen = !next;
+      status = "Press any key — or poke the screen!";
+      await refreshLockStatus();
+    }
+  }
+
+  async function onOpenAccessibilitySettings() {
+    error = "";
+    try {
+      await openAccessibilitySettings();
+    } catch (e) {
+      error = lockErrorMessage(e);
     }
   }
 
@@ -206,14 +264,22 @@
       {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
     </button>
     <p class="hint">
-      Baby Lock goes fullscreen, stays on top, and blocks webview shortcuts.
-      Hold <kbd>Esc</kbd> for 2 seconds to unlock.
+      Baby Lock goes fullscreen, stays on top, and blocks OS + webview shortcuts on macOS
+      (Accessibility required). Hold <kbd>Esc</kbd> for 2 seconds to unlock.
       {#if !inTauri}
         <br />Browser preview: OS shortcut capture needs `npm run tauri:dev`.
+      {/if}
+      {#if lockStatus?.supported && !lockStatus.accessibilityGranted}
+        <br />Grant <strong>Accessibility</strong> for BabySmash before locking for full shortcut capture.
       {/if}
     </p>
     {#if error}
       <p class="error">{error}</p>
+      {#if needsAccessibility}
+        <button type="button" class="settings" onclick={() => onOpenAccessibilitySettings()}>
+          Open System Settings
+        </button>
+      {/if}
     {/if}
   </aside>
 </div>
@@ -425,6 +491,14 @@
     color: var(--accent-deep);
     font-size: 0.85rem;
     font-weight: 700;
+  }
+
+  .controls button.settings {
+    background: #fff4e6;
+  }
+
+  .controls button.settings:hover {
+    background: #ffe8cc;
   }
 
   .unlock-bar {

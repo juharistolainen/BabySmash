@@ -2,6 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 const LOCK_KEY = "babysmash-baby-lock";
 
+export const ERR_NEEDS_ACCESSIBILITY = "needs_accessibility";
+
+export type MacosKeyboardLockStatus = {
+  armed: boolean;
+  accessibilityGranted: boolean;
+  secureInput: boolean;
+  supported: boolean;
+};
+
 /** True when running inside a Tauri webview (not plain Vite browser). */
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -22,6 +31,17 @@ export function writeStoredBabyLock(locked: boolean): void {
   } catch {
     // ignore quota / private-mode failures
   }
+}
+
+/** Normalize Tauri/invoke errors into a stable string code or message. */
+export function lockErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+export function isNeedsAccessibility(error: unknown): boolean {
+  return lockErrorMessage(error).includes(ERR_NEEDS_ACCESSIBILITY);
 }
 
 export async function applyBabyLock(locked: boolean): Promise<void> {
@@ -48,4 +68,20 @@ export async function applyFullscreen(fullscreen: boolean): Promise<void> {
     return;
   }
   await invoke("set_fullscreen", { fullscreen });
+}
+
+export async function fetchMacosKeyboardLockStatus(): Promise<MacosKeyboardLockStatus | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<MacosKeyboardLockStatus>("macos_keyboard_lock_status");
+  } catch {
+    return null;
+  }
+}
+
+export async function openAccessibilitySettings(): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Accessibility settings are only available in the desktop app");
+  }
+  await invoke("open_accessibility_settings");
 }
