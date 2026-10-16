@@ -120,7 +120,26 @@
   async function refreshLockStatus() {
     const next = await fetchMacosKeyboardLockStatus();
     lockStatus = next;
-    if (babyLocked && next?.secureInput) {
+    if (!babyLocked || !next?.supported) return;
+
+    // Accessibility revoked mid-lock: fail open so we don't leave a wedged tap.
+    if (next.armed && !next.accessibilityGranted) {
+      needsAccessibility = true;
+      error =
+        "Accessibility was turned off — Baby Lock released. Re-enable it in System Settings to lock again.";
+      try {
+        await applyBabyLock(false);
+      } catch {
+        // still roll back UI
+      }
+      writeStoredBabyLock(false);
+      babyLocked = false;
+      fullscreen = false;
+      status = "Press any key — or poke the screen!";
+      return;
+    }
+
+    if (next.secureInput) {
       status = "Another app is blocking keyboard lock (Secure Input)";
     }
   }

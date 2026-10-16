@@ -49,7 +49,8 @@ pub fn status(state: &SharedLockState) -> LockStatus {
     {
         LockStatus {
             armed: guard.armed,
-            accessibility_granted: platform::accessibility_filter_allowed(),
+            // Prefer IOHID for polling — creating a probe tap every few seconds is heavy.
+            accessibility_granted: platform::accessibility_granted_fast(),
             secure_input: platform::secure_input_enabled(),
             supported: true,
         }
@@ -110,6 +111,7 @@ pub fn open_accessibility_settings() -> Result<(), String> {
 }
 
 /// Re-apply kiosk presentation options after the app becomes active again.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn reassert_if_armed(state: &SharedLockState) {
     #[cfg(target_os = "macos")]
     {
@@ -254,6 +256,14 @@ mod platform {
             | (1u64 << K_CG_EVENT_FLAGS_CHANGED)
     }
 
+    /// Lightweight TCC read for status polling (Accessibility / PostEvent pane).
+    pub fn accessibility_granted_fast() -> bool {
+        unsafe {
+            IOHIDCheckAccess(K_IOHID_REQUEST_TYPE_POST_EVENT) == K_IOHID_ACCESS_TYPE_GRANTED
+        }
+    }
+
+    /// Authoritative check used when arming: can we create an active filter tap?
     pub fn accessibility_filter_allowed() -> bool {
         unsafe {
             let port = CGEventTapCreate(
@@ -265,8 +275,7 @@ mod platform {
                 ptr::null_mut(),
             );
             if port.is_null() {
-                return IOHIDCheckAccess(K_IOHID_REQUEST_TYPE_POST_EVENT)
-                    == K_IOHID_ACCESS_TYPE_GRANTED;
+                return accessibility_granted_fast();
             }
             CFMachPortInvalidate(port);
             CFRelease(port);

@@ -74,7 +74,7 @@ When Baby Lock arms on macOS it:
 
 **Still not blockable:** hardware power-button hold; Secure Event Input (password fields in other apps — the tap goes deaf; status warns when detected). Mouse stays usable for recovery.
 
-See `docs/macos-keyboard-lock.md` and `docs/macos-keyboard-lock-plan.md`.
+See `docs/macos-keyboard-lock.md`, `docs/macos-keyboard-lock-plan.md`, and the manual QA list in `docs/macos-keyboard-lock-qa.md`.
 
 ### Windows / Linux
 
