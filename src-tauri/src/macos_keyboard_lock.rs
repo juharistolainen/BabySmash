@@ -4,6 +4,7 @@
 //! Layer 2: active `CGEventTap` filter (Accessibility / PostEvent).
 
 use serde::Serialize;
+use std::ffi::c_void;
 use std::sync::Mutex;
 
 /// Returned from `set_baby_lock` when Accessibility is required but missing.
@@ -58,7 +59,15 @@ pub fn status(state: &SharedLockState) -> LockStatus {
 }
 
 /// Must be called on the AppKit main thread on macOS (presentation options).
-pub fn set_locked(state: &SharedLockState, locked: bool) -> Result<(), String> {
+///
+/// `ns_window` is the main window's `NSWindow*` on macOS (ignored elsewhere and
+/// when unlocking). Locking stretches it over the screen instead of using native
+/// fullscreen, which AppKit refuses while kiosk presentation options are active.
+pub fn set_locked(
+    state: &SharedLockState,
+    locked: bool,
+    ns_window: *mut c_void,
+) -> Result<(), String> {
     let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
     if locked == guard.armed {
         return Ok(());
@@ -67,14 +76,14 @@ pub fn set_locked(state: &SharedLockState, locked: bool) -> Result<(), String> {
     if locked {
         #[cfg(target_os = "macos")]
         {
-            let session = platform::arm()?;
+            let session = platform::arm(ns_window)?;
             guard.session = Some(session);
             guard.armed = true;
             Ok(())
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = ERR_NEEDS_ACCESSIBILITY;
+            let _ = (ERR_NEEDS_ACCESSIBILITY, ns_window);
             guard.armed = true;
             Ok(())
         }
@@ -127,8 +136,12 @@ mod platform {
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
+    use objc2::rc::Retained;
     use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions};
+    use objc2_app_kit::{
+        NSApplication, NSApplicationPresentationOptions, NSWindow, NSWindowStyleMask,
+    };
+    use objc2_foundation::NSRect;
 
     // --- CoreGraphics FFI (active filter tap; return NULL to swallow) ---
 
@@ -236,8 +249,20 @@ mod platform {
     // Safety: port/source only touched from the tap thread or after join.
     unsafe impl Send for TapThread {}
 
+    /// Window geometry captured before the kiosk frame is applied.
+    struct SavedWindow {
+        window: Retained<NSWindow>,
+        frame: NSRect,
+        style: NSWindowStyleMask,
+        movable: bool,
+    }
+
+    // Safety: created in `arm` and consumed in `disarm`, both on the main thread.
+    unsafe impl Send for SavedWindow {}
+
     pub struct ArmedSession {
         saved_presentation: SavedPresentation,
+        saved_window: Option<SavedWindow>,
         tap: TapThread,
     }
 
@@ -318,6 +343,47 @@ mod platform {
             .ok_or_else(|| "presentation options must be set on the main thread".to_string())?;
         NSApplication::sharedApplication(mtm).setPresentationOptions(kiosk_options());
         Ok(())
+    }
+
+    /// Re-apply a style mask without losing keyboard focus. AppKit rebuilds the
+    /// frame view when `Titled` toggles, which drops the first responder.
+    fn set_style_mask_keep_focus(window: &NSWindow, style: NSWindowStyleMask) {
+        let responder = window.firstResponder();
+        window.setStyleMask(style);
+        window.makeFirstResponder(responder.as_deref());
+    }
+
+    /// Cover the window's screen with a borderless frame. Native fullscreen
+    /// (`toggleFullScreen:`) needs a Spaces transition, which AppKit aborts
+    /// while `DisableProcessSwitching` / `HideDock` are set — the window
+    /// animates toward fullscreen and snaps back.
+    fn enter_kiosk_window(window: Retained<NSWindow>) -> Option<SavedWindow> {
+        let style = window.styleMask();
+        // Already in native fullscreen: it covers the screen; leave it alone.
+        if style.contains(NSWindowStyleMask::FullScreen) {
+            return None;
+        }
+        let screen = window.screen()?;
+        let saved = SavedWindow {
+            frame: window.frame(),
+            style,
+            movable: window.isMovable(),
+            window,
+        };
+        let kiosk_style = style
+            & !(NSWindowStyleMask::Titled
+                | NSWindowStyleMask::Resizable
+                | NSWindowStyleMask::Miniaturizable);
+        set_style_mask_keep_focus(&saved.window, kiosk_style);
+        saved.window.setFrame_display(screen.frame(), true);
+        saved.window.setMovable(false);
+        Some(saved)
+    }
+
+    fn exit_kiosk_window(saved: SavedWindow) {
+        set_style_mask_keep_focus(&saved.window, saved.style);
+        saved.window.setFrame_display(saved.frame, true);
+        saved.window.setMovable(saved.movable);
     }
 
     fn should_drop_key(event: CGEventRef) -> bool {
@@ -482,7 +548,7 @@ mod platform {
         ACTIVE_TAP_PORT.store(ptr::null_mut(), Ordering::SeqCst);
     }
 
-    pub fn arm() -> Result<ArmedSession, String> {
+    pub fn arm(ns_window: *mut c_void) -> Result<ArmedSession, String> {
         // Fail closed: require a working active filter tap before claiming lock.
         if !accessibility_filter_allowed() {
             request_accessibility_prompt();
@@ -503,14 +569,22 @@ mod platform {
             }
         };
 
+        // Safety: `ns_window` comes from Tauri's `ns_window()` for a live window.
+        let saved_window = unsafe { Retained::retain(ns_window.cast::<NSWindow>()) }
+            .and_then(enter_kiosk_window);
+
         Ok(ArmedSession {
             saved_presentation: saved,
+            saved_window,
             tap,
         })
     }
 
     pub fn disarm(session: ArmedSession) {
         stop_event_tap(session.tap);
+        if let Some(saved_window) = session.saved_window {
+            exit_kiosk_window(saved_window);
+        }
         if let Some(mtm) = MainThreadMarker::new() {
             NSApplication::sharedApplication(mtm)
                 .setPresentationOptions(session.saved_presentation.0);

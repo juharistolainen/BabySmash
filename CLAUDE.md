@@ -44,6 +44,7 @@ There is no test suite in either the JS or the Rust code. You can only verify ma
 - **Revoke path.** While locked, the UI polls `macos_keyboard_lock_status` every 3s. If Accessibility has been revoked, the UI unlocks (fails open) so the keyboard doesn't get stuck. The status check uses the cheap IOHID check, not a probe tap.
 - **Unlock** means holding Esc for 2s (`UNLOCK_HOLD_MS` in `+page.svelte`). While locked, the UI swallows other key events.
 - **Lock intent survives remounts.** It is stored in `sessionStorage`, because fullscreen changes can remount the webview. Window locking sets always-on-top *before* fullscreen (this order matters on Linux) and never toggles decorations, because toggling them remounts the webview.
+- **No native fullscreen on macOS while locked.** AppKit aborts the `toggleFullScreen:` Spaces transition when kiosk options (`DisableProcessSwitching`, `HideDock`) are set, so the window bounces back. Instead, `arm()` makes the `NSWindow` borderless and sizes it to the screen, and `disarm()` restores the saved frame and style mask. It restores the first responder after `setStyleMask`, because otherwise key events stop reaching the webview.
 - Windows and Linux get only fullscreen, always-on-top, and webview-shortcut blocking. OS-reserved shortcuts still work there.
 
 ### macOS distribution constraint

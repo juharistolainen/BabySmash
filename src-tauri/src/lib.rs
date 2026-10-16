@@ -36,7 +36,12 @@ fn run_lock_on_main(app: &AppHandle, locked: bool) -> Result<(), String> {
         let (tx, rx) = mpsc::channel();
         app.run_on_main_thread(move || {
             let state = app2.state::<SharedLockState>();
-            let _ = tx.send(macos_keyboard_lock::set_locked(&state, locked));
+            // Unlock must still tear down capture if the window lookup fails.
+            let ns_window = main_window(&app2)
+                .ok()
+                .and_then(|w| w.ns_window().ok())
+                .unwrap_or(std::ptr::null_mut());
+            let _ = tx.send(macos_keyboard_lock::set_locked(&state, locked, ns_window));
         })
         .map_err(|e| e.to_string())?;
         rx.recv().map_err(|e| e.to_string())?
@@ -44,7 +49,7 @@ fn run_lock_on_main(app: &AppHandle, locked: bool) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let state = app.state::<SharedLockState>();
-        macos_keyboard_lock::set_locked(&state, locked)
+        macos_keyboard_lock::set_locked(&state, locked, std::ptr::null_mut())
     }
 }
 
@@ -55,6 +60,9 @@ fn apply_window_lock(app: &AppHandle, locked: bool) -> Result<(), String> {
     window
         .set_always_on_top(locked)
         .map_err(|e| e.to_string())?;
+    // macOS: the lock module sizes the window over the screen itself, because
+    // native fullscreen bounces back while kiosk presentation options are set.
+    #[cfg(not(target_os = "macos"))]
     window
         .set_fullscreen(locked)
         .map_err(|e| e.to_string())?;
