@@ -1,7 +1,7 @@
-//! macOS Baby Lock keyboard capture (scaffold).
+//! macOS Baby Lock keyboard capture.
 //!
-//! Phase 0: shared state, status/settings commands, macOS/non-macOS stubs.
-//! Later phases fill in presentation options and the active CGEventTap.
+//! Phase 1: AppKit kiosk `presentationOptions` (no TCC).
+//! Phase 2+: active CGEventTap (Accessibility).
 
 use serde::Serialize;
 use std::sync::Mutex;
@@ -21,11 +21,17 @@ pub struct LockStatus {
 
 pub struct KeyboardLockState {
     armed: bool,
+    #[cfg(target_os = "macos")]
+    saved_presentation: Option<platform::SavedPresentation>,
 }
 
 impl Default for KeyboardLockState {
     fn default() -> Self {
-        Self { armed: false }
+        Self {
+            armed: false,
+            #[cfg(target_os = "macos")]
+            saved_presentation: None,
+        }
     }
 }
 
@@ -43,7 +49,7 @@ pub fn status(state: &SharedLockState) -> LockStatus {
     {
         LockStatus {
             armed: guard.armed,
-            accessibility_granted: false, // filled in Phase 2
+            accessibility_granted: false, // Phase 2
             secure_input: false,
             supported: true,
         }
@@ -59,12 +65,37 @@ pub fn status(state: &SharedLockState) -> LockStatus {
     }
 }
 
-/// Arm or disarm macOS keyboard capture layers (stub in Phase 0).
+/// Must be called on the AppKit main thread on macOS (presentation options).
 pub fn set_locked(state: &SharedLockState, locked: bool) -> Result<(), String> {
     let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
-    guard.armed = locked;
-    let _ = ERR_NEEDS_ACCESSIBILITY; // used by later phases
-    Ok(())
+    if locked == guard.armed {
+        return Ok(());
+    }
+
+    if locked {
+        #[cfg(target_os = "macos")]
+        {
+            let saved = platform::arm_presentation()?;
+            guard.saved_presentation = Some(saved);
+            guard.armed = true;
+            Ok(())
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = ERR_NEEDS_ACCESSIBILITY;
+            guard.armed = true;
+            Ok(())
+        }
+    } else {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(saved) = guard.saved_presentation.take() {
+                platform::disarm_presentation(saved);
+            }
+        }
+        guard.armed = false;
+        Ok(())
+    }
 }
 
 pub fn open_accessibility_settings() -> Result<(), String> {
@@ -84,6 +115,59 @@ pub fn open_accessibility_settings() -> Result<(), String> {
     }
 }
 
-pub fn reassert_if_armed(_state: &SharedLockState) {
-    // Phase 1+: re-apply kiosk presentation options when still armed.
+/// Re-apply kiosk presentation options after the app becomes active again.
+pub fn reassert_if_armed(state: &SharedLockState) {
+    #[cfg(target_os = "macos")]
+    {
+        let guard = state.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.armed {
+            let _ = platform::apply_kiosk_presentation();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = state;
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions};
+
+    #[derive(Clone, Copy)]
+    pub struct SavedPresentation(NSApplicationPresentationOptions);
+
+    fn kiosk_options() -> NSApplicationPresentationOptions {
+        NSApplicationPresentationOptions::HideDock
+            | NSApplicationPresentationOptions::HideMenuBar
+            | NSApplicationPresentationOptions::DisableProcessSwitching
+            | NSApplicationPresentationOptions::DisableForceQuit
+            | NSApplicationPresentationOptions::DisableSessionTermination
+            | NSApplicationPresentationOptions::DisableAppleMenu
+            | NSApplicationPresentationOptions::DisableHideApplication
+    }
+
+    pub fn apply_kiosk_presentation() -> Result<(), String> {
+        let mtm = MainThreadMarker::new()
+            .ok_or_else(|| "presentation options must be set on the main thread".to_string())?;
+        let app = NSApplication::sharedApplication(mtm);
+        app.setPresentationOptions(kiosk_options());
+        Ok(())
+    }
+
+    pub fn arm_presentation() -> Result<SavedPresentation, String> {
+        let mtm = MainThreadMarker::new()
+            .ok_or_else(|| "Baby Lock must arm on the main thread".to_string())?;
+        let app = NSApplication::sharedApplication(mtm);
+        let saved = SavedPresentation(app.presentationOptions());
+        app.setPresentationOptions(kiosk_options());
+        Ok(saved)
+    }
+
+    pub fn disarm_presentation(saved: SavedPresentation) {
+        if let Some(mtm) = MainThreadMarker::new() {
+            NSApplication::sharedApplication(mtm).setPresentationOptions(saved.0);
+        }
+    }
 }

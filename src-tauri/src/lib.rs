@@ -1,31 +1,50 @@
 mod macos_keyboard_lock;
 
+#[cfg(target_os = "macos")]
+use std::sync::mpsc;
 use std::sync::Mutex;
 
 use macos_keyboard_lock::{KeyboardLockState, LockStatus, SharedLockState};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
 use tauri_plugin_prevent_default::Flags;
 
 #[tauri::command]
 fn set_baby_lock(app: AppHandle, locked: bool) -> Result<(), String> {
-    let state = app.state::<SharedLockState>();
-
     if locked {
         // macOS capture first so we fail closed before mutating the window.
-        macos_keyboard_lock::set_locked(&state, true)?;
+        run_lock_on_main(&app, true)?;
         match apply_window_lock(&app, true) {
             Ok(()) => Ok(()),
             Err(e) => {
-                let _ = macos_keyboard_lock::set_locked(&state, false);
+                let _ = run_lock_on_main(&app, false);
                 Err(e)
             }
         }
     } else {
         let window_result = apply_window_lock(&app, false);
         // Always tear down capture even if window ops fail.
-        let capture_result = macos_keyboard_lock::set_locked(&state, false);
+        let capture_result = run_lock_on_main(&app, false);
         window_result?;
         capture_result
+    }
+}
+
+fn run_lock_on_main(app: &AppHandle, locked: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let app2 = app.clone();
+        let (tx, rx) = mpsc::channel();
+        app.run_on_main_thread(move || {
+            let state = app2.state::<SharedLockState>();
+            let _ = tx.send(macos_keyboard_lock::set_locked(&state, locked));
+        })
+        .map_err(|e| e.to_string())?;
+        rx.recv().map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let state = app.state::<SharedLockState>();
+        macos_keyboard_lock::set_locked(&state, locked)
     }
 }
 
@@ -103,6 +122,22 @@ pub fn run() {
             macos_keyboard_lock_status,
             open_accessibility_settings
         ])
+        .on_window_event(|window, event| {
+            if let WindowEvent::Focused(true) = event {
+                #[cfg(target_os = "macos")]
+                {
+                    let app = window.app_handle().clone();
+                    let _ = app.run_on_main_thread(move || {
+                        let state = app.state::<SharedLockState>();
+                        macos_keyboard_lock::reassert_if_armed(&state);
+                    });
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = window;
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
