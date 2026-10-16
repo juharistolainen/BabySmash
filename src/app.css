@@ -1,0 +1,50 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@600;800&display=swap");
+
+:root {
+  --ink: #14324f;
+  --surface: #e8f7ff;
+  --panel: rgba(255, 255, 255, 0.9);
+  --accent: #ff4d6d;
+  --accent-deep: #d93657;
+  --sky: #2f9eef;
+  --sun: #ffd43b;
+  --mint: #51cf66;
+  --shadow: 0 12px 28px rgba(20, 50, 79, 0.16);
+  font-family: "Nunito", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+body {
+  background:
+    radial-gradient(1000px 640px at 8% -8%, #ffd6e7 0%, transparent 55%),
+    radial-gradient(900px 560px at 100% 0%, #a5d8ff 0%, transparent 52%),
+    radial-gradient(820px 480px at 70% 110%, #b2f2bb 0%, transparent 50%),
+    linear-gradient(165deg, #e8f7ff 0%, #fff5fb 48%, #f1fff4 100%);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
