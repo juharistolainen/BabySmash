@@ -17,7 +17,7 @@ Cross-platform desktop play app for babies: every keyboard smash (and screen pok
 ## Requirements
 
 - Node.js 20+ and npm
-- Rust toolchain (stable) — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+- Rust **1.90+** (stable) — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 - OS-specific Tauri deps (WebView2 on Windows, WebKitGTK on Linux, Xcode CLT on macOS)
 
 ## Run locally
