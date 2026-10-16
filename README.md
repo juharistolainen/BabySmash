@@ -10,6 +10,7 @@ Cross-platform desktop play app for babies: every keyboard smash (and screen pok
   - enters fullscreen
   - keeps the window always on top
   - disables webview/browser shortcuts (reload, find, print, DevTools chords, etc.) via `tauri-plugin-prevent-default`
+  - on **macOS**, applies AppKit kiosk presentation options and an active `CGEventTap` to block OS shortcuts (Spotlight, Mission Control, Cmd+Q/Tab, screenshots, …) — requires **Accessibility** permission
   - swallows key events in the UI while locked
   - hides parent controls (unlock by holding `Esc`)
 - **Parent unlock** — hold `Esc` for **2 seconds**
@@ -60,20 +61,35 @@ Browser-only `npm run dev` can preview smash graphics/sound and the Fullscreen A
 
 Baby Lock **does** block in-app / webview shortcuts (for example `Ctrl/Cmd+R`, `Ctrl/Cmd+W`, `Ctrl/Cmd+F`, `F5`, `F12`, context menu) so accidental baby chords don’t reload or close the webview UI.
 
-It **cannot fully suppress OS-reserved shortcuts**. Those are enforced by the operating system and often require accessibility / kiosk / MDM privileges beyond a normal desktop app:
+### macOS (implemented)
+
+When Baby Lock arms on macOS it:
+
+1. Sets AppKit kiosk `presentationOptions` (hides Dock/menu bar; disables Cmd+Tab / Exposé, Force Quit panel, session-termination UI, Apple menu, Hide).
+2. Installs an **active** `CGEventTap` that drops Cmd/Ctrl/Opt chords and function keys before system handlers see them, while still passing plain smash keys and Esc for unlock.
+
+**You must grant Accessibility** (System Settings → Privacy & Security → Accessibility) for the tap. Without it, Baby Lock fails closed and the UI offers **Open System Settings**. After rebuilding/re-signing, you may need to toggle the permission again.
+
+**Distribution:** ship as a notarized Developer ID app **without App Sandbox**. Active filter taps are not reliable in the sandbox / Mac App Store.
+
+**Still not blockable:** hardware power-button hold; Secure Event Input (password fields in other apps — the tap goes deaf; status warns when detected). Mouse stays usable for recovery.
+
+See `docs/macos-keyboard-lock.md` and `docs/macos-keyboard-lock-plan.md`.
+
+### Windows / Linux
+
+OS-reserved shortcuts are **not** fully suppressed yet:
 
 | Platform | Typically still available to the OS |
 | -------- | ----------------------------------- |
-| macOS    | `Cmd+Tab`, `Cmd+Q`, `Cmd+Space`, Mission Control, Force Quit |
 | Windows  | `Alt+Tab`, `Ctrl+Alt+Del`, `Win` key, some `Alt+F4` paths |
 | Linux    | Desktop environment shortcuts (`Alt+Tab`, system overlays); Wayland especially limits global grabs |
-
-Practical tip: enable OS guided-access / kiosk / “focus” modes when you need stronger lockdown, and keep Baby Lock on for the app-level protection.
 
 ## Project layout
 
 - `src/` — SvelteKit UI (smash canvas, audio, lock controls)
-- `src-tauri/` — Tauri/Rust shell (`set_baby_lock`, `set_fullscreen`, prevent-default plugin)
+- `src-tauri/` — Tauri/Rust shell (`set_baby_lock`, `set_fullscreen`, `macos_keyboard_lock`, prevent-default plugin)
+- `docs/` — macOS keyboard-lock research and implementation plan
 
 ## License
 
