@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const LOCK_KEY = "babysmash-baby-lock";
 
@@ -84,4 +85,10 @@ export async function openAccessibilitySettings(): Promise<void> {
     throw new Error("Accessibility settings are only available in the desktop app");
   }
   await invoke("open_accessibility_settings");
+}
+
+/** File > Preferences… in the native menu. Returns an unsubscribe function. */
+export async function onOpenPreferencesMenu(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return () => undefined;
+  return listen("open-preferences", handler);
 }

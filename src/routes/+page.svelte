@@ -9,11 +9,21 @@
     isNeedsAccessibility,
     isTauri,
     lockErrorMessage,
+    onOpenPreferencesMenu,
     openAccessibilitySettings,
     readStoredBabyLock,
     writeStoredBabyLock,
     type MacosKeyboardLockStatus,
   } from "$lib/babyLock";
+  import {
+    applyPreferences,
+    loadPreferences,
+    resolveMode,
+    savePreferences,
+    type Preferences,
+  } from "$lib/preferences";
+  import { getTheme } from "$lib/themes";
+  import PreferencesDialog from "$lib/PreferencesDialog.svelte";
 
   const MAX_BURSTS = 40;
   const UNLOCK_HOLD_MS = 2000;
@@ -28,6 +38,27 @@
   let lockStatus = $state<MacosKeyboardLockStatus | null>(null);
   let inTauri = $state(false);
   let statusPoll: ReturnType<typeof setInterval> | null = null;
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  let preferences = $state<Preferences>(loadPreferences());
+  let systemDark = $state(darkQuery.matches);
+  let prefsOpen = $state(false);
+  const theme = $derived(getTheme(preferences.theme));
+  const resolvedMode = $derived(resolveMode(preferences.mode, systemDark));
+
+  $effect(() => {
+    applyPreferences(preferences, systemDark);
+  });
+
+  function updatePreferences(next: Preferences) {
+    preferences = next;
+    savePreferences(next);
+  }
+
+  function openPreferences() {
+    // The parent can't reach the dialog while locked, but a menu event still could.
+    if (!babyLocked) prefsOpen = true;
+  }
 
   let unlockTimer: ReturnType<typeof setTimeout> | null = null;
   let unlockStartedAt = 0;
@@ -48,8 +79,30 @@
       if (babyLocked) void refreshLockStatus();
     }, 3000);
 
+    const onSystemThemeChange = (event: MediaQueryListEvent) => {
+      systemDark = event.matches;
+    };
+    darkQuery.addEventListener("change", onSystemThemeChange);
+
+    let unlistenMenu: (() => void) | null = null;
+    let unmounted = false;
+    void onOpenPreferencesMenu(openPreferences).then((unlisten) => {
+      if (unmounted) unlisten();
+      else unlistenMenu = unlisten;
+    });
+
     const onKeyDown = (event: KeyboardEvent) => {
       unlockAudio();
+
+      // Let the open dialog handle its own keys (Tab, Space, Esc to close).
+      if (prefsOpen) return;
+
+      // Browser preview has no native menu; mirror its Cmd/Ctrl+, accelerator.
+      if (!babyLocked && event.key === "," && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        openPreferences();
+        return;
+      }
 
       // Parent unlock: hold Escape for 2 seconds while locked.
       if (event.key === "Escape") {
@@ -78,7 +131,7 @@
         return;
       }
 
-      spawnBurst(burstFromKey(event.key));
+      spawnBurst(burstFromKey(event.key, theme));
       playSmashTone(keySeed(event.key));
       status = babyLocked ? "Baby Lock on — hold Esc to unlock" : "Smash!";
     };
@@ -93,7 +146,7 @@
       const target = event.target as HTMLElement | null;
       if (target?.closest("[data-controls]")) return;
       unlockAudio();
-      spawnBurst(burstFromPointer(event.clientX, event.clientY));
+      spawnBurst(burstFromPointer(event.clientX, event.clientY, theme));
       playSmashTone(Math.floor(event.clientX + event.clientY));
       status = "Poke!";
     };
@@ -112,6 +165,9 @@
       window.removeEventListener("keyup", onKeyUp, true);
       window.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("contextmenu", onContext);
+      darkQuery.removeEventListener("change", onSystemThemeChange);
+      unmounted = true;
+      unlistenMenu?.();
       cancelUnlockHold();
       if (statusPoll) clearInterval(statusPoll);
     };
@@ -186,6 +242,7 @@
   async function setLocked(next: boolean) {
     error = "";
     needsAccessibility = false;
+    if (next) prefsOpen = false;
     // Update UI + persistence before native window ops (webview may remount).
     writeStoredBabyLock(next);
     babyLocked = next;
@@ -241,10 +298,15 @@
   <div class="playfield" aria-label="Smash playfield">
     {#each bursts as burst (burst.id)}
       <div
-        class="burst shape-{burst.shape}"
+        class="burst {burst.emoji ? 'shape-emoji' : `shape-${burst.shape}`}"
         style="--x:{burst.x}%; --y:{burst.y}%; --c:{burst.color}; --s:{burst.size}px; --r:{burst.rotate}deg;"
       >
-        <span>{burst.label}</span>
+        {#if burst.emoji}
+          <span class="emoji">{burst.emoji}</span>
+          {#if burst.label}<span class="badge">{burst.label}</span>{/if}
+        {:else}
+          <span>{burst.label}</span>
+        {/if}
       </div>
     {/each}
   </div>
@@ -252,6 +314,7 @@
   {#if unlockProgress > 0}
     <div class="unlock-bar" aria-hidden="true">
       <div class="unlock-fill" style="transform: scaleX({unlockProgress})"></div>
+      <span class="unlock-icon" style="--p: {unlockProgress}">{theme.unlockIcon}</span>
       <span>Unlocking…</span>
     </div>
   {/if}
@@ -263,6 +326,7 @@
     <button type="button" onclick={() => toggleFullscreen()}>
       {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
     </button>
+    <button type="button" onclick={openPreferences}>Preferences…</button>
     <p class="hint">
       Baby Lock goes fullscreen, stays on top, and blocks OS + webview shortcuts on macOS
       (Accessibility required). Hold <kbd>Esc</kbd> for 2 seconds to unlock.
@@ -283,6 +347,14 @@
     {/if}
   </aside>
 </div>
+
+<PreferencesDialog
+  open={prefsOpen}
+  {preferences}
+  {resolvedMode}
+  onchange={updatePreferences}
+  onclose={() => (prefsOpen = false)}
+/>
 
 <style>
   .stage {
@@ -314,14 +386,14 @@
     letter-spacing: 0.02em;
     line-height: 1;
     color: var(--ink);
-    text-shadow: 0 2px 0 rgba(255, 255, 255, 0.7);
+    text-shadow: 0 2px 0 var(--title-shadow);
   }
 
   .brand p {
     margin: 0.45rem 0 0;
     font-size: 1rem;
     font-weight: 700;
-    color: rgba(20, 50, 79, 0.72);
+    color: var(--ink-soft);
   }
 
   .playfield {
@@ -347,7 +419,7 @@
     transform: rotate(var(--r)) scale(0.2);
     animation: pop-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) forwards,
       drift-out 1.7s ease-in 0.45s forwards;
-    filter: drop-shadow(0 8px 14px rgba(20, 50, 79, 0.22));
+    filter: drop-shadow(0 8px 14px var(--burst-shadow));
     pointer-events: none;
   }
 
@@ -368,7 +440,7 @@
   .shape-triangle {
     background: transparent;
     color: var(--c);
-    filter: drop-shadow(0 8px 10px rgba(20, 50, 79, 0.18));
+    filter: drop-shadow(0 8px 10px var(--burst-shadow));
   }
 
   .shape-triangle::before {
@@ -409,6 +481,37 @@
     box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.12);
   }
 
+  .shape-emoji::before {
+    content: "";
+    position: absolute;
+    inset: -6%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--c) 0%, transparent 68%);
+    opacity: 0.6;
+  }
+
+  .shape-emoji .emoji {
+    position: relative;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-size: calc(var(--s) * 0.72);
+    font-weight: 400;
+  }
+
+  .shape-emoji .badge {
+    position: absolute;
+    right: -2%;
+    bottom: -2%;
+    min-width: calc(var(--s) * 0.34);
+    height: calc(var(--s) * 0.34);
+    padding: 0 0.15em;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--c);
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+    font-size: calc(var(--s) * 0.22);
+  }
+
   @keyframes pop-in {
     to {
       transform: rotate(var(--r)) scale(1);
@@ -433,7 +536,7 @@
     width: min(320px, calc(100vw - 2rem));
     padding: 1rem;
     background: var(--panel);
-    border: 2px solid rgba(20, 50, 79, 0.08);
+    border: 2px solid var(--panel-border);
     border-radius: 18px;
     box-shadow: var(--shadow);
     transition: opacity 0.3s ease, transform 0.3s ease;
@@ -451,13 +554,13 @@
     padding: 0.75rem 1rem;
     font-weight: 800;
     color: var(--ink);
-    background: #e7f5ff;
+    background: var(--button-bg);
     transition: transform 0.15s ease, background 0.15s ease;
   }
 
   .controls button:hover {
     transform: translateY(-1px);
-    background: #d0ebff;
+    background: var(--button-bg-hover);
   }
 
   .controls button.primary {
@@ -466,39 +569,39 @@
   }
 
   .controls button.primary:hover {
-    background: linear-gradient(180deg, #ff6b88 0%, var(--accent-deep) 100%);
+    background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent-deep) 100%);
   }
 
   .hint {
     margin: 0;
     font-size: 0.82rem;
     line-height: 1.35;
-    color: rgba(20, 50, 79, 0.72);
+    color: var(--ink-soft);
   }
 
   .hint kbd {
     display: inline-block;
     padding: 0.05rem 0.35rem;
     border-radius: 6px;
-    background: #fff;
-    border: 1px solid rgba(20, 50, 79, 0.15);
+    background: var(--kbd-bg);
+    border: 1px solid var(--kbd-border);
     font-family: inherit;
     font-weight: 800;
   }
 
   .error {
     margin: 0;
-    color: var(--accent-deep);
+    color: var(--danger);
     font-size: 0.85rem;
     font-weight: 700;
   }
 
   .controls button.settings {
-    background: #fff4e6;
+    background: var(--warn-bg);
   }
 
   .controls button.settings:hover {
-    background: #ffe8cc;
+    background: var(--warn-bg-hover);
   }
 
   .unlock-bar {
@@ -510,7 +613,7 @@
     width: min(280px, 70vw);
     padding: 0.75rem 1rem 0.9rem;
     border-radius: 999px;
-    background: rgba(20, 50, 79, 0.82);
+    background: var(--unlock-bg);
     color: white;
     text-align: center;
     font-weight: 800;
@@ -521,13 +624,26 @@
     position: absolute;
     inset: 0;
     transform-origin: left center;
-    background: linear-gradient(90deg, var(--mint), var(--sky));
+    background: linear-gradient(90deg, var(--unlock-a), var(--unlock-b));
     opacity: 0.85;
   }
 
   .unlock-bar span {
     position: relative;
     z-index: 1;
+  }
+
+  /* Inset by 1.1rem each side so the icon isn't clipped by the pill at 0% / 100%. */
+  .unlock-bar .unlock-icon {
+    position: absolute;
+    top: 50%;
+    left: calc(1.1rem + var(--p) * (100% - 2.2rem));
+    z-index: 2;
+    transform: translate(-50%, -50%);
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-size: 1.35rem;
+    font-weight: 400;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
   }
 
   @media (max-width: 640px) {

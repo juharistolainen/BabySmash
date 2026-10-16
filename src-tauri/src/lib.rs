@@ -5,7 +5,8 @@ use std::sync::mpsc;
 use std::sync::Mutex;
 
 use macos_keyboard_lock::{KeyboardLockState, LockStatus, SharedLockState};
-use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
+use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow, WindowEvent};
 use tauri_plugin_prevent_default::Flags;
 
 #[tauri::command]
@@ -66,6 +67,14 @@ fn apply_window_lock(app: &AppHandle, locked: bool) -> Result<(), String> {
     window
         .set_fullscreen(locked)
         .map_err(|e| e.to_string())?;
+    // Windows/Linux draw the menu bar inside the window, where a baby could
+    // click File > Quit. macOS hides it via kiosk `HideMenuBar` instead.
+    #[cfg(not(target_os = "macos"))]
+    if locked {
+        window.hide_menu().map_err(|e| e.to_string())?;
+    } else {
+        window.show_menu().map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -86,6 +95,33 @@ fn macos_keyboard_lock_status(app: AppHandle) -> LockStatus {
 #[tauri::command]
 fn open_accessibility_settings() -> Result<(), String> {
     macos_keyboard_lock::open_accessibility_settings()
+}
+
+const PREFERENCES_MENU_ID: &str = "preferences";
+const OPEN_PREFERENCES_EVENT: &str = "open-preferences";
+
+/// Platform default menu plus File > Preferences…. Linux has no default File
+/// submenu, so one is created there.
+fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::default(app)?;
+    let preferences = MenuItem::with_id(
+        app,
+        PREFERENCES_MENU_ID,
+        "Preferences…",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+    let file_menu = menu.items()?.into_iter().find_map(|item| match item {
+        MenuItemKind::Submenu(sub) if sub.text().ok().as_deref() == Some("File") => Some(sub),
+        _ => None,
+    });
+    match file_menu {
+        Some(file) => {
+            file.prepend_items(&[&preferences, &PredefinedMenuItem::separator(app)?])?
+        }
+        None => menu.prepend(&Submenu::with_items(app, "File", true, &[&preferences])?)?,
+    }
+    Ok(menu)
 }
 
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -124,6 +160,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(prevent)
         .manage(Mutex::new(KeyboardLockState::new()) as SharedLockState)
+        .menu(build_menu)
+        .on_menu_event(|app, event| {
+            // The webview ignores this while Baby Lock is on.
+            if event.id() == PREFERENCES_MENU_ID {
+                let _ = app.emit_to("main", OPEN_PREFERENCES_EVENT, ());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             set_baby_lock,
             set_fullscreen,
