@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v1.0.0). Leave empty to build the current ref without creating a GitHub Release."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    name: Build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS aarch64
+            platform: macos-latest
+            args: --target aarch64-apple-darwin --bundles app,dmg
+            rust_targets: aarch64-apple-darwin
+          - label: macOS x86_64
+            platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles app,dmg
+            rust_targets: x86_64-apple-darwin
+          - label: Linux
+            platform: ubuntu-22.04
+            args: --bundles deb,appimage
+            rust_targets: ""
+          - label: Windows
+            platform: windows-latest
+            args: --bundles nsis,msi
+            rust_targets: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            wget \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Resolve release settings
+        id: release
+        shell: bash
+        run: |
+          # GitHub.com can host Releases; Origin CI still builds + uploads workflow artifacts.
+          if [[ "${GITHUB_SERVER_URL}" == "https://github.com" ]]; then
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "tag_name=v__VERSION__" >> "$GITHUB_OUTPUT"
+            echo "release_name=BabySmash v__VERSION__" >> "$GITHUB_OUTPUT"
+          else
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "tag_name=" >> "$GITHUB_OUTPUT"
+            echo "release_name=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.release.outputs.tag_name }}
+          releaseName: ${{ steps.release.outputs.release_name }}
+          releaseBody: |
+            BabySmash **v__VERSION__** — keyboard smash play for babies (Tauri + SvelteKit).
+
+            ### Downloads
+            - **macOS**: `.dmg` / `.app` (Apple Silicon and Intel builds)
+            - **Windows**: `.msi` / NSIS `.exe`
+            - **Linux**: `.deb` / `.AppImage`
+
+            On macOS, grant **Accessibility** to BabySmash before enabling Baby Lock for full shortcut capture. Hold **Esc** for 2 seconds to unlock.
+          releaseDraft: false
+          prerelease: false
+          uploadWorkflowArtifacts: true
+          projectPath: .
+          args: ${{ matrix.args }}
