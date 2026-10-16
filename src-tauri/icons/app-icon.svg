@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- BabySmash app icon source. Regenerate platform icons with:
+       npx tauri icon src-tauri/icons/app-icon.svg -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8f7ff"/>
+      <stop offset="0.5" stop-color="#fff5fb"/>
+      <stop offset="1" stop-color="#f1fff4"/>
+    </linearGradient>
+    <radialGradient id="blobPink" cx="0.12" cy="0.05" r="0.6">
+      <stop offset="0" stop-color="#ffd6e7"/>
+      <stop offset="1" stop-color="#ffd6e7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="blobBlue" cx="0.95" cy="0.1" r="0.55">
+      <stop offset="0" stop-color="#a5d8ff"/>
+      <stop offset="1" stop-color="#a5d8ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="blobGreen" cx="0.6" cy="1.05" r="0.55">
+      <stop offset="0" stop-color="#b2f2bb"/>
+      <stop offset="1" stop-color="#b2f2bb" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="keyFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#74c0fc"/>
+      <stop offset="1" stop-color="#4dabf7"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+    <filter id="tileShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#14324f" flood-opacity="0.28"/>
+    </filter>
+    <filter id="pop" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#14324f" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <!-- Tile (macOS grid: 824px body inside a 1024px canvas) -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#tileShadow)"/>
+
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#blobPink)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#blobBlue)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#blobGreen)"/>
+
+    <!-- Impact sparks -->
+    <g stroke-linecap="round" stroke-width="22" fill="none">
+      <path d="M512 196 V236" stroke="#ffa94d"/>
+      <path d="M196 520 H236" stroke="#38d9a9"/>
+      <path d="M828 520 H788" stroke="#f783ac"/>
+      <path d="M512 846 V808" stroke="#da77f2"/>
+    </g>
+    <circle cx="410" cy="190" r="13" fill="#38d9a9"/>
+    <circle cx="845" cy="420" r="13" fill="#ffa94d"/>
+    <circle cx="180" cy="640" r="13" fill="#f783ac"/>
+    <circle cx="640" cy="852" r="13" fill="#4dabf7"/>
+
+    <!-- Shapes bursting out of the key -->
+    <g filter="url(#pop)">
+      <circle cx="285" cy="292" r="84" fill="#ff6b6b"/>
+      <path transform="translate(738 286) rotate(14)"
+            d="M0 -96 L22 -30 L88 -30 L34 14 L56 82 L0 40 L-56 82 L-34 14 L-88 -30 L-22 -30 Z"
+            fill="#ffd43b" stroke="#ffd43b" stroke-width="26" stroke-linejoin="round"/>
+      <path transform="translate(282 748) rotate(-16)"
+            d="M0 -82 L82 64 L-82 64 Z"
+            fill="#69db7c" stroke="#69db7c" stroke-width="34" stroke-linejoin="round"/>
+      <rect transform="translate(748 742) rotate(18)" x="-74" y="-74" width="148" height="148" rx="34"
+            fill="#748ffc"/>
+    </g>
+
+    <!-- The smashed key -->
+    <g transform="translate(512 528) rotate(-7)" filter="url(#pop)">
+      <rect x="-196" y="-176" width="392" height="392" rx="92" fill="#1c7ed6"/>
+      <rect x="-196" y="-206" width="392" height="380" rx="92" fill="url(#keyFace)"/>
+      <rect x="-160" y="-184" width="320" height="300" rx="70" fill="#ffffff" fill-opacity="0.16"/>
+      <path transform="translate(-14 -36)"
+            d="M-60 -104 V104 M-60 -104 H14 A50 50 0 0 1 14 -4 H-60 M-60 -4 H24 A54 54 0 0 1 24 104 H-60"
+            fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

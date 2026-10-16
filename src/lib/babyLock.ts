@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const LOCK_KEY = "babysmash-baby-lock";
 
@@ -84,4 +85,38 @@ export async function openAccessibilitySettings(): Promise<void> {
     throw new Error("Accessibility settings are only available in the desktop app");
   }
   await invoke("open_accessibility_settings");
+}
+
+export type NativeBuildInfo = {
+  name: string;
+  version: string;
+  /** Unix seconds. */
+  buildTime: number;
+  rustc: string;
+  target: string;
+  tauri: string;
+  webview: string | null;
+  os: string;
+  arch: string;
+};
+
+export async function fetchBuildInfo(): Promise<NativeBuildInfo | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<NativeBuildInfo>("app_build_info");
+  } catch {
+    return null;
+  }
+}
+
+/** App menu (macOS) or Help (Windows/Linux) > About. Returns an unsubscribe function. */
+export async function onOpenAboutMenu(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return () => undefined;
+  return listen("open-about", handler);
+}
+
+/** File > Preferences… in the native menu. Returns an unsubscribe function. */
+export async function onOpenPreferencesMenu(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return () => undefined;
+  return listen("open-preferences", handler);
 }

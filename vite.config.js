@@ -2,11 +2,33 @@ import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
+// @ts-expect-error type error without @types/node package
+import { readFileSync } from "node:fs";
 const host = process.env.TAURI_DEV_HOST;
+
+/** @param {string} dir */
+const pkgVersion = (dir) =>
+  JSON.parse(readFileSync(new URL(`${dir}/package.json`, import.meta.url), "utf8")).version;
+
+// Single source for the copyright: also stamped into the OS bundle metadata.
+const tauriConf = JSON.parse(
+  readFileSync(new URL("./src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+);
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [sveltekit()],
+
+  // Installed (not semver-range) versions for the About dialog; see src/lib/buildInfo.ts.
+  define: {
+    __FRONTEND_VERSIONS__: JSON.stringify({
+      app: pkgVersion("."),
+      copyright: tauriConf.bundle?.copyright ?? "",
+      svelte: pkgVersion("./node_modules/svelte"),
+      kit: pkgVersion("./node_modules/@sveltejs/kit"),
+      vite: pkgVersion("./node_modules/vite"),
+    }),
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

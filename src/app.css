@@ -1,15 +1,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@600;800&display=swap");
 
 :root {
-  --ink: #14324f;
   --surface: #e8f7ff;
-  --panel: rgba(255, 255, 255, 0.9);
-  --accent: #ff4d6d;
-  --accent-deep: #d93657;
-  --sky: #2f9eef;
-  --sun: #ffd43b;
-  --mint: #51cf66;
-  --shadow: 0 12px 28px rgba(20, 50, 79, 0.16);
+  --danger: #d93657;
   font-family: "Nunito", "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--surface);
@@ -17,6 +10,186 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* UI tokens by mode. data-mode is always resolved ("light" | "dark"), see preferences.ts. */
+[data-mode="light"],
+:root {
+  color-scheme: light;
+  --ink: #14324f;
+  --ink-soft: rgba(20, 50, 79, 0.72);
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-solid: #ffffff;
+  --panel-border: rgba(20, 50, 79, 0.08);
+  --button-bg: #e7f5ff;
+  --button-bg-hover: #d0ebff;
+  --kbd-bg: #ffffff;
+  --kbd-border: rgba(20, 50, 79, 0.15);
+  --warn-bg: #fff4e6;
+  --warn-bg-hover: #ffe8cc;
+  --title-shadow: rgba(255, 255, 255, 0.7);
+  --burst-shadow: rgba(20, 50, 79, 0.22);
+  --shadow: 0 12px 28px rgba(20, 50, 79, 0.16);
+}
+
+[data-mode="dark"] {
+  color-scheme: dark;
+  --ink: #e6f1ff;
+  --ink-soft: rgba(230, 241, 255, 0.7);
+  --panel: rgba(20, 30, 48, 0.88);
+  --panel-solid: #172236;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --button-bg: #22324a;
+  --button-bg-hover: #2c4060;
+  --kbd-bg: #1a2638;
+  --kbd-border: rgba(255, 255, 255, 0.18);
+  --warn-bg: #3a2c18;
+  --warn-bg-hover: #4a3820;
+  --title-shadow: rgba(0, 0, 0, 0.45);
+  --burst-shadow: rgba(0, 0, 0, 0.45);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Per-theme accents, button tints (with dark variants) and backgrounds. Not scoped to :root so Preferences theme cards can preview them. */
+:root,
+[data-theme="default"] {
+  --accent: #ff4d6d;
+  --accent-deep: #d93657;
+  --accent-hover: #ff6b88;
+  --unlock-bg: rgba(20, 50, 79, 0.82);
+  --unlock-a: #51cf66;
+  --unlock-b: #2f9eef;
+  --bg:
+    radial-gradient(1000px 640px at 8% -8%, #ffd6e7 0%, transparent 55%),
+    radial-gradient(900px 560px at 100% 0%, #a5d8ff 0%, transparent 52%),
+    radial-gradient(820px 480px at 70% 110%, #b2f2bb 0%, transparent 50%),
+    linear-gradient(165deg, #e8f7ff 0%, #fff5fb 48%, #f1fff4 100%);
+}
+[data-theme="default"][data-mode="dark"] {
+  --bg:
+    radial-gradient(1000px 640px at 8% -8%, #4a1d3a 0%, transparent 55%),
+    radial-gradient(900px 560px at 100% 0%, #123a5e 0%, transparent 52%),
+    radial-gradient(820px 480px at 70% 110%, #13402a 0%, transparent 50%),
+    linear-gradient(165deg, #0e1a2b 0%, #1a1426 48%, #0f1f1a 100%);
+}
+
+[data-theme="animals"] {
+  --accent: #e76f51;
+  --accent-deep: #c4512f;
+  --accent-hover: #f08a6c;
+  --unlock-bg: rgba(52, 40, 20, 0.85);
+  --unlock-a: #ffd166;
+  --unlock-b: #90be6d;
+  --button-bg: #fdf0d5;
+  --button-bg-hover: #fae1b0;
+  --bg:
+    radial-gradient(140px 140px at 88% 14%, #fff3b0 0%, #ffd43b 40%, transparent 42%),
+    linear-gradient(180deg, #bde0fe 0%, #e3f4ff 55%, #c9eaa0 70%, #95cf63 100%);
+}
+[data-theme="animals"][data-mode="dark"] {
+  --button-bg: #3a2f1e;
+  --button-bg-hover: #4a3c26;
+  --bg:
+    radial-gradient(110px 110px at 86% 14%, #fffbe6 0%, #e9e4c8 38%, transparent 40%),
+    linear-gradient(180deg, #0b1d3a 0%, #1b2f55 60%, #1f3d2b 72%, #142a1b 100%);
+}
+
+[data-theme="ocean"] {
+  --accent: #0096c7;
+  --accent-deep: #0077b6;
+  --accent-hover: #23a9d6;
+  --unlock-bg: rgba(3, 4, 94, 0.82);
+  --unlock-a: #72efdd;
+  --unlock-b: #48cae4;
+  --button-bg: #e0f7fa;
+  --button-bg-hover: #c5eff5;
+  --bg:
+    radial-gradient(1200px 300px at 50% -10%, rgba(255, 255, 255, 0.7) 0%, transparent 60%),
+    linear-gradient(180deg, #caf0f8 0%, #90e0ef 40%, #48cae4 75%, #0096c7 100%);
+}
+[data-theme="ocean"][data-mode="dark"] {
+  --button-bg: #0e2f4f;
+  --button-bg-hover: #154069;
+  --bg:
+    radial-gradient(1200px 300px at 50% -10%, rgba(72, 202, 228, 0.25) 0%, transparent 60%),
+    linear-gradient(180deg, #023e8a 0%, #03045e 55%, #000b2e 100%);
+}
+
+[data-theme="space"] {
+  --accent: #9d4edd;
+  --accent-deep: #7b2cbf;
+  --accent-hover: #b06ee6;
+  --unlock-bg: rgba(16, 0, 43, 0.85);
+  --unlock-a: #f72585;
+  --unlock-b: #4cc9f0;
+  --button-bg: #efe5ff;
+  --button-bg-hover: #e0ccff;
+  --bg:
+    radial-gradient(3px 3px at 15% 25%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 72% 18%, #ffffff 50%, transparent 51%),
+    radial-gradient(3px 3px at 40% 70%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 88% 62%, #ffffff 50%, transparent 51%),
+    radial-gradient(700px 500px at 80% 100%, #ffc6ff 0%, transparent 60%),
+    linear-gradient(165deg, #cdb4db 0%, #bde0fe 100%);
+}
+[data-theme="space"][data-mode="dark"] {
+  --button-bg: #2a1a4a;
+  --button-bg-hover: #38245f;
+  --bg:
+    radial-gradient(2px 2px at 12% 20%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 30% 65%, #ffffff 50%, transparent 51%),
+    radial-gradient(3px 3px at 55% 30%, #fff8c4 50%, transparent 51%),
+    radial-gradient(2px 2px at 70% 80%, #ffffff 50%, transparent 51%),
+    radial-gradient(2px 2px at 85% 15%, #ffffff 50%, transparent 51%),
+    radial-gradient(3px 3px at 93% 55%, #c4e3ff 50%, transparent 51%),
+    radial-gradient(800px 500px at 20% 110%, #5a189a 0%, transparent 60%),
+    radial-gradient(700px 500px at 100% 0%, #240046 0%, transparent 60%),
+    linear-gradient(165deg, #10002b 0%, #0b0b2b 100%);
+}
+
+[data-theme="fruit"] {
+  --accent: #ff595e;
+  --accent-deep: #e03e45;
+  --accent-hover: #ff7a7e;
+  --unlock-bg: rgba(74, 20, 40, 0.85);
+  --unlock-a: #ffca3a;
+  --unlock-b: #ff70a6;
+  --button-bg: #ffe8e0;
+  --button-bg-hover: #ffd6c9;
+  --bg:
+    radial-gradient(900px 600px at 0% 0%, #ffd6a5 0%, transparent 55%),
+    radial-gradient(800px 560px at 100% 100%, #ffadad 0%, transparent 55%),
+    radial-gradient(700px 500px at 100% 0%, #fdffb6 0%, transparent 50%),
+    linear-gradient(165deg, #fff1e6 0%, #ffe5ec 100%);
+}
+[data-theme="fruit"][data-mode="dark"] {
+  --button-bg: #3d1d27;
+  --button-bg-hover: #4f2633;
+  --bg:
+    radial-gradient(900px 600px at 0% 0%, #5c2a10 0%, transparent 55%),
+    radial-gradient(800px 560px at 100% 100%, #5a1a2a 0%, transparent 55%),
+    linear-gradient(165deg, #2b1320 0%, #22141c 100%);
+}
+
+[data-theme="vehicles"] {
+  --accent: #fb8500;
+  --accent-deep: #d96f00;
+  --accent-hover: #ff9a26;
+  --unlock-bg: rgba(30, 33, 40, 0.88);
+  --unlock-a: #ffb703;
+  --unlock-b: #e63946;
+  --button-bg: #fff3d6;
+  --button-bg-hover: #ffe6a8;
+  --bg:
+    repeating-linear-gradient(90deg, transparent 0 60px, #fff8d6 60px 110px) 0 88% / 100% 8px no-repeat,
+    linear-gradient(180deg, #d7efff 0%, #f2faff 76%, #a5adb9 76%, #8d96a3 100%);
+}
+[data-theme="vehicles"][data-mode="dark"] {
+  --button-bg: #2a3242;
+  --button-bg-hover: #364056;
+  --bg:
+    repeating-linear-gradient(90deg, transparent 0 60px, #e9c46a 60px 110px) 0 88% / 100% 8px no-repeat,
+    linear-gradient(180deg, #0d1b2a 0%, #1b263b 76%, #2b2f36 76%, #1f2228 100%);
 }
 
 *,
@@ -37,11 +210,8 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(1000px 640px at 8% -8%, #ffd6e7 0%, transparent 55%),
-    radial-gradient(900px 560px at 100% 0%, #a5d8ff 0%, transparent 52%),
-    radial-gradient(820px 480px at 70% 110%, #b2f2bb 0%, transparent 50%),
-    linear-gradient(165deg, #e8f7ff 0%, #fff5fb 48%, #f1fff4 100%);
+  background: var(--bg);
+  background-attachment: fixed;
 }
 
 button {
