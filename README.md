@@ -9,9 +9,9 @@ Cross-platform desktop play app for babies: every keyboard smash (and screen pok
 - **Baby Lock** — exclusive play mode that:
   - enters fullscreen
   - keeps the window always on top
-  - hides window decorations/chrome
   - disables webview/browser shortcuts (reload, find, print, DevTools chords, etc.) via `tauri-plugin-prevent-default`
   - swallows key events in the UI while locked
+  - hides parent controls (unlock by holding `Esc`)
 - **Parent unlock** — hold `Esc` for **2 seconds**
 
 ## Requirements
@@ -51,10 +51,10 @@ npm run check
 1. Start with `npm run tauri:dev`
 2. Smash keys / poke the window — shapes and sounds should appear immediately
 3. Click **Fullscreen** to toggle display mode without locking
-4. Click **Baby Lock** — UI controls hide, window goes fullscreen + always-on-top, decorations drop
+4. Click **Baby Lock** — UI controls hide; window goes fullscreen + always-on-top
 5. Hold **Esc** for ~2 seconds to unlock (progress bar appears)
 
-Browser-only `npm run dev` can preview smash graphics/sound and the Fullscreen API, but Baby Lock’s always-on-top / decoration / webview-shortcut blocking need the Tauri shell.
+Browser-only `npm run dev` can preview smash graphics/sound and the Fullscreen API, but Baby Lock’s always-on-top / webview-shortcut blocking need the Tauri shell.
 
 ## Platform caveats (shortcut capture)
 

@@ -2,7 +2,13 @@
   import { onMount } from "svelte";
   import { unlockAudio, playSmashTone, playUnlockChime } from "$lib/audio";
   import { burstFromKey, burstFromPointer, keySeed, type SmashBurst } from "$lib/smash";
-  import { applyBabyLock, applyFullscreen, isTauri } from "$lib/babyLock";
+  import {
+    applyBabyLock,
+    applyFullscreen,
+    isTauri,
+    readStoredBabyLock,
+    writeStoredBabyLock,
+  } from "$lib/babyLock";
 
   const MAX_BURSTS = 40;
   const UNLOCK_HOLD_MS = 2000;
@@ -21,6 +27,13 @@
 
   onMount(() => {
     inTauri = isTauri();
+
+    // Fullscreen / decoration changes can remount the webview; restore lock UI.
+    if (readStoredBabyLock()) {
+      babyLocked = true;
+      fullscreen = true;
+      status = "Baby Lock on — hold Esc for 2s to unlock";
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       unlockAudio();
@@ -131,15 +144,21 @@
 
   async function setLocked(next: boolean) {
     error = "";
+    // Update UI + persistence before native window ops (webview may remount).
+    writeStoredBabyLock(next);
+    babyLocked = next;
+    fullscreen = next;
+    status = next
+      ? "Baby Lock on — hold Esc for 2s to unlock"
+      : "Unlocked — parent controls are back";
     try {
       await applyBabyLock(next);
-      babyLocked = next;
-      fullscreen = next;
-      status = next
-        ? "Baby Lock on — hold Esc for 2s to unlock"
-        : "Unlocked — parent controls are back";
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      // Roll back UI if the shell rejected the lock change.
+      writeStoredBabyLock(!next);
+      babyLocked = !next;
+      fullscreen = !next;
     }
   }
 
@@ -187,8 +206,8 @@
       {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
     </button>
     <p class="hint">
-      Baby Lock goes fullscreen, stays on top, hides window chrome, and blocks
-      webview shortcuts. Hold <kbd>Esc</kbd> for 2 seconds to unlock.
+      Baby Lock goes fullscreen, stays on top, and blocks webview shortcuts.
+      Hold <kbd>Esc</kbd> for 2 seconds to unlock.
       {#if !inTauri}
         <br />Browser preview: OS shortcut capture needs `npm run tauri:dev`.
       {/if}
@@ -201,9 +220,10 @@
 
 <style>
   .stage {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
   }
 

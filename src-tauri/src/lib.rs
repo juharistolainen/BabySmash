@@ -4,15 +4,13 @@ use tauri_plugin_prevent_default::Flags;
 #[tauri::command]
 fn set_baby_lock(app: AppHandle, locked: bool) -> Result<(), String> {
     let window = main_window(&app)?;
-    window
-        .set_fullscreen(locked)
-        .map_err(|e| e.to_string())?;
+    // Order matters on Linux: always-on-top first, then fullscreen. Avoid
+    // toggling decorations here — it can remount the webview and drop UI state.
     window
         .set_always_on_top(locked)
         .map_err(|e| e.to_string())?;
-    // Hide chrome in lock so accidental title-bar clicks are harder.
     window
-        .set_decorations(!locked)
+        .set_fullscreen(locked)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
