@@ -18,6 +18,11 @@ identifier = "allow-open-accessibility-settings"
 description = "Open macOS Accessibility privacy settings"
 commands.allow = ["open_accessibility_settings"]
 
+[[permission]]
+identifier = "allow-app-build-info"
+description = "Read app version and build metadata for the About dialog"
+commands.allow = ["app_build_info"]
+
 [[set]]
 identifier = "babysmash-commands"
 description = "All BabySmash custom commands"
@@ -25,5 +30,6 @@ permissions = [
   "allow-set-baby-lock",
   "allow-set-fullscreen",
   "allow-macos-keyboard-lock-status",
-  "allow-open-accessibility-settings"
+  "allow-open-accessibility-settings",
+  "allow-app-build-info"
 ]

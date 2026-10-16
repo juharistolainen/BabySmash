@@ -5,7 +5,8 @@ use std::sync::mpsc;
 use std::sync::Mutex;
 
 use macos_keyboard_lock::{KeyboardLockState, LockStatus, SharedLockState};
-use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
+use serde::Serialize;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewWindow, WindowEvent};
 use tauri_plugin_prevent_default::Flags;
 
@@ -97,13 +98,59 @@ fn open_accessibility_settings() -> Result<(), String> {
     macos_keyboard_lock::open_accessibility_settings()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildInfo {
+    name: String,
+    version: String,
+    /// Unix seconds when build.rs last ran.
+    build_time: u64,
+    profile: &'static str,
+    commit: Option<&'static str>,
+    rustc: &'static str,
+    target: &'static str,
+    tauri: &'static str,
+    /// WebKit (macOS), WebView2 (Windows) or WebKitGTK (Linux) version.
+    webview: Option<String>,
+    os: &'static str,
+    arch: &'static str,
+}
+
+#[tauri::command]
+fn app_build_info(app: AppHandle) -> BuildInfo {
+    let pkg = app.package_info();
+    let commit = env!("BABYSMASH_GIT_COMMIT");
+    BuildInfo {
+        name: pkg.name.clone(),
+        version: pkg.version.to_string(),
+        build_time: env!("BABYSMASH_BUILD_TIME").parse().unwrap_or(0),
+        profile: env!("BABYSMASH_PROFILE"),
+        commit: (!commit.is_empty()).then_some(commit),
+        rustc: env!("BABYSMASH_RUSTC_VERSION"),
+        target: env!("BABYSMASH_TARGET"),
+        tauri: tauri::VERSION,
+        webview: tauri::webview_version().ok(),
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+    }
+}
+
 const PREFERENCES_MENU_ID: &str = "preferences";
 const OPEN_PREFERENCES_EVENT: &str = "open-preferences";
+const ABOUT_MENU_ID: &str = "about";
+const OPEN_ABOUT_EVENT: &str = "open-about";
 
-/// Platform default menu plus File > Preferences…. Linux has no default File
-/// submenu, so one is created there.
+/// Mirrors Tauri's `Menu::default`, but with File > Preferences… and an About
+/// item that opens the app's own dialog instead of the stock native panel.
+/// About sits in the app menu on macOS and under Help elsewhere.
 fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let menu = Menu::default(app)?;
+    let about = MenuItem::with_id(
+        app,
+        ABOUT_MENU_ID,
+        format!("About {}", app.package_info().name),
+        true,
+        None::<&str>,
+    )?;
     let preferences = MenuItem::with_id(
         app,
         PREFERENCES_MENU_ID,
@@ -111,17 +158,94 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         true,
         Some("CmdOrCtrl+,"),
     )?;
-    let file_menu = menu.items()?.into_iter().find_map(|item| match item {
-        MenuItemKind::Submenu(sub) if sub.text().ok().as_deref() == Some("File") => Some(sub),
-        _ => None,
-    });
-    match file_menu {
-        Some(file) => {
-            file.prepend_items(&[&preferences, &PredefinedMenuItem::separator(app)?])?
-        }
-        None => menu.prepend(&Submenu::with_items(app, "File", true, &[&preferences])?)?,
-    }
-    Ok(menu)
+
+    #[cfg(target_os = "macos")]
+    let app_menu = Submenu::with_items(
+        app,
+        app.package_info().name.clone(),
+        true,
+        &[
+            &about,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    // GTK doesn't support the predefined Close Window / Quit items.
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &preferences,
+            #[cfg(not(target_os = "linux"))]
+            &PredefinedMenuItem::separator(app)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::close_window(app, None)?,
+            #[cfg(windows)]
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    #[cfg(target_os = "macos")]
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(app, None)?],
+    )?;
+
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    #[cfg(not(target_os = "macos"))]
+    let help_menu = Submenu::with_items(app, "Help", true, &[&about])?;
+
+    Menu::with_items(
+        app,
+        &[
+            #[cfg(target_os = "macos")]
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            #[cfg(target_os = "macos")]
+            &view_menu,
+            &window_menu,
+            #[cfg(not(target_os = "macos"))]
+            &help_menu,
+        ],
+    )
 }
 
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -162,16 +286,20 @@ pub fn run() {
         .manage(Mutex::new(KeyboardLockState::new()) as SharedLockState)
         .menu(build_menu)
         .on_menu_event(|app, event| {
-            // The webview ignores this while Baby Lock is on.
-            if event.id() == PREFERENCES_MENU_ID {
-                let _ = app.emit_to("main", OPEN_PREFERENCES_EVENT, ());
-            }
+            // The webview ignores these while Baby Lock is on.
+            let ui_event = match event.id().as_ref() {
+                PREFERENCES_MENU_ID => OPEN_PREFERENCES_EVENT,
+                ABOUT_MENU_ID => OPEN_ABOUT_EVENT,
+                _ => return,
+            };
+            let _ = app.emit_to("main", ui_event, ());
         })
         .invoke_handler(tauri::generate_handler![
             set_baby_lock,
             set_fullscreen,
             macos_keyboard_lock_status,
-            open_accessibility_settings
+            open_accessibility_settings,
+            app_build_info
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(true) = event {

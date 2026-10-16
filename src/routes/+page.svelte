@@ -9,6 +9,7 @@
     isNeedsAccessibility,
     isTauri,
     lockErrorMessage,
+    onOpenAboutMenu,
     onOpenPreferencesMenu,
     openAccessibilitySettings,
     readStoredBabyLock,
@@ -24,6 +25,7 @@
   } from "$lib/preferences";
   import { getTheme } from "$lib/themes";
   import PreferencesDialog from "$lib/PreferencesDialog.svelte";
+  import AboutDialog from "$lib/AboutDialog.svelte";
 
   const MAX_BURSTS = 40;
   const UNLOCK_HOLD_MS = 2000;
@@ -43,6 +45,7 @@
   let preferences = $state<Preferences>(loadPreferences());
   let systemDark = $state(darkQuery.matches);
   let prefsOpen = $state(false);
+  let aboutOpen = $state(false);
   const theme = $derived(getTheme(preferences.theme));
   const resolvedMode = $derived(resolveMode(preferences.mode, systemDark));
 
@@ -55,9 +58,13 @@
     savePreferences(next);
   }
 
+  // The parent can't reach these buttons while locked, but a menu event still could.
   function openPreferences() {
-    // The parent can't reach the dialog while locked, but a menu event still could.
     if (!babyLocked) prefsOpen = true;
+  }
+
+  function openAbout() {
+    if (!babyLocked) aboutOpen = true;
   }
 
   let unlockTimer: ReturnType<typeof setTimeout> | null = null;
@@ -84,18 +91,23 @@
     };
     darkQuery.addEventListener("change", onSystemThemeChange);
 
-    let unlistenMenu: (() => void) | null = null;
+    const menuUnlisteners: (() => void)[] = [];
     let unmounted = false;
-    void onOpenPreferencesMenu(openPreferences).then((unlisten) => {
-      if (unmounted) unlisten();
-      else unlistenMenu = unlisten;
-    });
+    for (const subscribe of [
+      onOpenPreferencesMenu(openPreferences),
+      onOpenAboutMenu(openAbout),
+    ]) {
+      void subscribe.then((unlisten) => {
+        if (unmounted) unlisten();
+        else menuUnlisteners.push(unlisten);
+      });
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       unlockAudio();
 
-      // Let the open dialog handle its own keys (Tab, Space, Esc to close).
-      if (prefsOpen) return;
+      // Let an open dialog handle its own keys (Tab, Space, Esc to close).
+      if (prefsOpen || aboutOpen) return;
 
       // Browser preview has no native menu; mirror its Cmd/Ctrl+, accelerator.
       if (!babyLocked && event.key === "," && (event.metaKey || event.ctrlKey)) {
@@ -167,7 +179,7 @@
       window.removeEventListener("contextmenu", onContext);
       darkQuery.removeEventListener("change", onSystemThemeChange);
       unmounted = true;
-      unlistenMenu?.();
+      menuUnlisteners.forEach((unlisten) => unlisten());
       cancelUnlockHold();
       if (statusPoll) clearInterval(statusPoll);
     };
@@ -242,7 +254,10 @@
   async function setLocked(next: boolean) {
     error = "";
     needsAccessibility = false;
-    if (next) prefsOpen = false;
+    if (next) {
+      prefsOpen = false;
+      aboutOpen = false;
+    }
     // Update UI + persistence before native window ops (webview may remount).
     writeStoredBabyLock(next);
     babyLocked = next;
@@ -326,7 +341,10 @@
     <button type="button" onclick={() => toggleFullscreen()}>
       {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
     </button>
-    <button type="button" onclick={openPreferences}>Preferences…</button>
+    <div class="row">
+      <button type="button" onclick={openPreferences}>Preferences…</button>
+      <button type="button" onclick={openAbout}>About</button>
+    </div>
     <p class="hint">
       Baby Lock goes fullscreen, stays on top, and blocks OS + webview shortcuts on macOS
       (Accessibility required). Hold <kbd>Esc</kbd> for 2 seconds to unlock.
@@ -355,6 +373,8 @@
   onchange={updatePreferences}
   onclose={() => (prefsOpen = false)}
 />
+
+<AboutDialog open={aboutOpen} onclose={() => (aboutOpen = false)} />
 
 <style>
   .stage {
@@ -561,6 +581,12 @@
   .controls button:hover {
     transform: translateY(-1px);
     background: var(--button-bg-hover);
+  }
+
+  .controls .row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.65rem;
   }
 
   .controls button.primary {
