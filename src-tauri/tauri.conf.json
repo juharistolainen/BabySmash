@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "copyright": "Copyright (C) 2026 Ristolainen OÜ",
     "targets": "all",
     "icon": [
       "icons/32x32.png",

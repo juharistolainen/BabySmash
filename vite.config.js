@@ -10,6 +10,11 @@ const host = process.env.TAURI_DEV_HOST;
 const pkgVersion = (dir) =>
   JSON.parse(readFileSync(new URL(`${dir}/package.json`, import.meta.url), "utf8")).version;
 
+// Single source for the copyright: also stamped into the OS bundle metadata.
+const tauriConf = JSON.parse(
+  readFileSync(new URL("./src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+);
+
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [sveltekit()],
@@ -18,6 +23,7 @@ export default defineConfig(() => ({
   define: {
     __FRONTEND_VERSIONS__: JSON.stringify({
       app: pkgVersion("."),
+      copyright: tauriConf.bundle?.copyright ?? "",
       svelte: pkgVersion("./node_modules/svelte"),
       kit: pkgVersion("./node_modules/@sveltejs/kit"),
       vite: pkgVersion("./node_modules/vite"),

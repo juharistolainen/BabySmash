@@ -82,6 +82,7 @@
   /** Plain-text dump for bug reports. */
   async function copyDetails() {
     const lines = [`${name} ${version}`];
+    if (FRONTEND_VERSIONS.copyright) lines.push(FRONTEND_VERSIONS.copyright);
     for (const section of sections) {
       lines.push("", `${section.title}:`);
       for (const [label, value] of section.rows) lines.push(`  ${label}: ${value}`);
@@ -103,6 +104,9 @@
       <p class="name">{name}</p>
       <p class="version">Version {version}</p>
       <p class="tagline">Keyboard smash play for babies</p>
+      {#if FRONTEND_VERSIONS.copyright}
+        <p class="copyright">{FRONTEND_VERSIONS.copyright}</p>
+      {/if}
     </div>
   </div>
 
@@ -158,6 +162,7 @@
   }
 
   .tagline,
+  .copyright,
   .note {
     font-size: 0.85rem;
     color: var(--ink-soft);
