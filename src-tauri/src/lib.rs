@@ -127,7 +127,9 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     let app = window.app_handle().clone();
+                    let handle = app.clone();
                     let _ = app.run_on_main_thread(move || {
+                        let app = handle;
                         let state = app.state::<SharedLockState>();
                         macos_keyboard_lock::reassert_if_armed(&state);
                     });

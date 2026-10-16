@@ -19,20 +19,11 @@ pub struct LockStatus {
     pub supported: bool,
 }
 
+#[derive(Default)]
 pub struct KeyboardLockState {
     armed: bool,
     #[cfg(target_os = "macos")]
     session: Option<platform::ArmedSession>,
-}
-
-impl Default for KeyboardLockState {
-    fn default() -> Self {
-        Self {
-            armed: false,
-            #[cfg(target_os = "macos")]
-            session: None,
-        }
-    }
 }
 
 impl KeyboardLockState {
@@ -369,13 +360,12 @@ mod platform {
             return ptr::null_mut();
         }
 
-        if event_type == K_CG_EVENT_KEY_DOWN
+        if (event_type == K_CG_EVENT_KEY_DOWN
             || event_type == K_CG_EVENT_KEY_UP
-            || event_type == K_CG_EVENT_FLAGS_CHANGED
+            || event_type == K_CG_EVENT_FLAGS_CHANGED)
+            && should_drop_key(event)
         {
-            if should_drop_key(event) {
-                return ptr::null_mut();
-            }
+            return ptr::null_mut();
         }
 
         event
@@ -431,29 +421,26 @@ mod platform {
                 .spawn(move || {
                     let port = port_addr as CFMachPortRef;
                     let source = source_addr as CFRunLoopSourceRef;
-                    unsafe {
-                        let rl = CFRunLoopGetCurrent();
-                        {
-                            let mut slot = TAP_RUN_LOOP.lock().unwrap_or_else(|e| e.into_inner());
-                            *slot = Some(rl as usize);
-                        }
-                        CFRunLoopAddSource(rl, source, kCFRunLoopCommonModes);
-                        CGEventTapEnable(port, true);
-                        // Run until stop; CFRunLoopStop wakes us.
-                        while !stop_thread.load(Ordering::SeqCst) {
-                            CFRunLoopRun();
-                        }
-                        CFRunLoopRemoveSource(rl, source, kCFRunLoopCommonModes);
+                    // Closure body inherits the enclosing `unsafe` context.
+                    let rl = CFRunLoopGetCurrent();
+                    {
                         let mut slot = TAP_RUN_LOOP.lock().unwrap_or_else(|e| e.into_inner());
-                        *slot = None;
+                        *slot = Some(rl as usize);
                     }
+                    CFRunLoopAddSource(rl, source, kCFRunLoopCommonModes);
+                    CGEventTapEnable(port, true);
+                    // Run until stop; CFRunLoopStop wakes us.
+                    while !stop_thread.load(Ordering::SeqCst) {
+                        CFRunLoopRun();
+                    }
+                    CFRunLoopRemoveSource(rl, source, kCFRunLoopCommonModes);
+                    let mut slot = TAP_RUN_LOOP.lock().unwrap_or_else(|e| e.into_inner());
+                    *slot = None;
                 })
                 .map_err(|e| {
-                    unsafe {
-                        CFMachPortInvalidate(port);
-                        CFRelease(source);
-                        CFRelease(port);
-                    }
+                    CFMachPortInvalidate(port);
+                    CFRelease(source);
+                    CFRelease(port);
                     ACTIVE_TAP_PORT.store(ptr::null_mut(), Ordering::SeqCst);
                     e.to_string()
                 })?;
