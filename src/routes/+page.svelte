@@ -1,6 +1,13 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { unlockAudio, playSmashTone, playUnlockChime } from "$lib/audio";
+  import { onMount, tick } from "svelte";
+  import {
+    unlockAudio,
+    playSmash,
+    playUnlockChime,
+    setAmbient,
+    setAmbientPaused,
+    setVolume,
+  } from "$lib/audio";
   import { burstFromKey, burstFromPointer, keySeed, type SmashBurst } from "$lib/smash";
   import {
     applyBabyLock,
@@ -24,6 +31,7 @@
     type Preferences,
   } from "$lib/preferences";
   import { getTheme } from "$lib/themes";
+  import { SOUNDSCAPES } from "$lib/soundscapes";
   import PreferencesDialog from "$lib/PreferencesDialog.svelte";
   import AboutDialog from "$lib/AboutDialog.svelte";
 
@@ -48,12 +56,25 @@
   let aboutOpen = $state(false);
   const theme = $derived(getTheme(preferences.theme));
   const resolvedMode = $derived(resolveMode(preferences.mode, systemDark));
+  const soundscape = $derived(SOUNDSCAPES[preferences.theme]);
 
   $effect(() => {
     applyPreferences(preferences, systemDark);
   });
 
+  $effect(() => {
+    setVolume(preferences.volume);
+  });
+
+  // Takes effect once a gesture has unlocked audio; until then it's just recorded.
+  $effect(() => {
+    setAmbient(preferences.ambience ? soundscape.ambient : null);
+  });
+
   function updatePreferences(next: Preferences) {
+    // Dialog clicks skip the page's pointer handler, so unlock audio here too:
+    // this runs inside the click, which satisfies the autoplay policy.
+    unlockAudio();
     preferences = next;
     savePreferences(next);
   }
@@ -65,6 +86,24 @@
 
   function openAbout() {
     if (!babyLocked) aboutOpen = true;
+  }
+
+  let panelEl = $state<HTMLElement | null>(null);
+  let reopenEl = $state<HTMLButtonElement | null>(null);
+  // A new error re-opens a minimised panel (it may be the parent's only hint);
+  // minimising again dismisses that error until a different one appears.
+  let dismissedError = $state("");
+  const panelOpen = $derived(
+    !preferences.panelCollapsed || (error !== "" && error !== dismissedError),
+  );
+
+  async function setPanelCollapsed(panelCollapsed: boolean) {
+    if (panelCollapsed) dismissedError = error;
+    updatePreferences({ ...preferences, panelCollapsed });
+    // Move focus with the panel so keyboard users don't land on an inert element.
+    await tick();
+    if (panelCollapsed) reopenEl?.focus();
+    else panelEl?.querySelector<HTMLButtonElement>("button.primary")?.focus();
   }
 
   let unlockTimer: ReturnType<typeof setTimeout> | null = null;
@@ -144,7 +183,7 @@
       }
 
       spawnBurst(burstFromKey(event.key, theme));
-      playSmashTone(keySeed(event.key));
+      playSmash(keySeed(event.key), soundscape.voice);
       status = babyLocked ? "Baby Lock on — hold Esc to unlock" : "Smash!";
     };
 
@@ -159,7 +198,7 @@
       if (target?.closest("[data-controls]")) return;
       unlockAudio();
       spawnBurst(burstFromPointer(event.clientX, event.clientY, theme));
-      playSmashTone(Math.floor(event.clientX + event.clientY));
+      playSmash(Math.floor(event.clientX + event.clientY), soundscape.voice);
       status = "Poke!";
     };
 
@@ -167,16 +206,21 @@
       if (babyLocked) event.preventDefault();
     };
 
+    const onVisibility = () => setAmbientPaused(document.hidden);
+
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
     window.addEventListener("pointerdown", onPointer);
     window.addEventListener("contextmenu", onContext);
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
       window.removeEventListener("pointerdown", onPointer);
       window.removeEventListener("contextmenu", onContext);
+      document.removeEventListener("visibilitychange", onVisibility);
+      setAmbient(null);
       darkQuery.removeEventListener("change", onSystemThemeChange);
       unmounted = true;
       menuUnlisteners.forEach((unlisten) => unlisten());
@@ -334,7 +378,26 @@
     </div>
   {/if}
 
-  <aside class="controls" data-controls class:hidden={babyLocked}>
+  <aside
+    bind:this={panelEl}
+    class="controls"
+    data-controls
+    class:hidden={babyLocked || !panelOpen}
+    inert={babyLocked || !panelOpen}
+    aria-label="Controls"
+  >
+    <div class="panel-head">
+      <span>Grown-up controls</span>
+      <button
+        type="button"
+        class="minimize"
+        aria-label="Minimise controls"
+        title="Minimise"
+        onclick={() => setPanelCollapsed(true)}
+      >
+        –
+      </button>
+    </div>
     <button type="button" class="primary" onclick={() => setLocked(true)}>
       Baby Lock
     </button>
@@ -364,6 +427,20 @@
       {/if}
     {/if}
   </aside>
+
+  <button
+    bind:this={reopenEl}
+    type="button"
+    class="reopen"
+    data-controls
+    class:hidden={babyLocked || panelOpen}
+    inert={babyLocked || panelOpen}
+    aria-label="Show controls"
+    title="Show controls"
+    onclick={() => setPanelCollapsed(false)}
+  >
+    ⚙️
+  </button>
 </div>
 
 <PreferencesDialog
@@ -566,6 +643,52 @@
     opacity: 0;
     pointer-events: none;
     transform: translateY(12px);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: -0.25rem -0.25rem 0 0;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--ink-soft);
+  }
+
+  .controls button.minimize {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .reopen {
+    position: absolute;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 4;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    border: 2px solid var(--panel-border);
+    border-radius: 999px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    font-size: 1.3rem;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  .reopen:hover {
+    transform: scale(1.06);
+  }
+
+  .reopen.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.6);
   }
 
   .controls button {

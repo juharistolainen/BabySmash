@@ -319,6 +319,11 @@ mod platform {
     }
 
     pub fn open_accessibility_settings() -> Result<(), String> {
+        // macOS only lists apps that have requested access, so register first;
+        // otherwise the parent lands on a pane without BabySmash in it.
+        if !accessibility_granted_fast() {
+            request_accessibility_prompt();
+        }
         let url =
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
         match std::process::Command::new("open").arg(url).status() {

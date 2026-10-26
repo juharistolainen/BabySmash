@@ -1,6 +1,9 @@
 <script lang="ts">
   import Modal from "./Modal.svelte";
+  import BabyLockPermissions from "./BabyLockPermissions.svelte";
   import { THEMES, type ThemeId } from "./themes";
+  import { SOUNDSCAPES } from "./soundscapes";
+  import { playSmash } from "./audio";
   import type { ColorMode, Preferences, ResolvedMode } from "./preferences";
 
   let {
@@ -29,6 +32,21 @@
 
   function setTheme(theme: ThemeId) {
     onchange({ ...preferences, theme });
+    previewSound(theme);
+  }
+
+  function setAmbience(ambience: boolean) {
+    onchange({ ...preferences, ambience });
+  }
+
+  function setVolume(event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value) / 100;
+    onchange({ ...preferences, volume: value });
+  }
+
+  // Lets the parent hear a theme (or a new volume) without leaving the dialog.
+  function previewSound(theme: ThemeId = preferences.theme) {
+    playSmash(Math.floor(Math.random() * 1000), SOUNDSCAPES[theme].voice);
   }
 </script>
 
@@ -71,6 +89,40 @@
       {/each}
     </div>
   </section>
+
+  <section>
+    <h3 id="ambience-label">Sound</h3>
+    <div class="segmented two" role="radiogroup" aria-labelledby="ambience-label">
+      {#each [false, true] as on (on)}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={preferences.ambience === on}
+          class:active={preferences.ambience === on}
+          onclick={() => setAmbience(on)}
+        >
+          <span aria-hidden="true">{on ? "🎶" : "🔕"}</span>
+          {on ? "Background ambience" : "Smash sounds only"}
+        </button>
+      {/each}
+    </div>
+    <label class="volume">
+      <span aria-hidden="true">🔈</span>
+      <span class="visually-hidden">Volume</span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="5"
+        value={Math.round(preferences.volume * 100)}
+        oninput={setVolume}
+        onchange={() => previewSound()}
+      />
+      <span aria-hidden="true">🔊</span>
+    </label>
+  </section>
+
+  <BabyLockPermissions active={open} />
 </Modal>
 
 <style>
@@ -99,6 +151,32 @@
   .segmented button.active {
     background: var(--panel-solid);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  }
+
+  .segmented.two {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.7rem;
+    padding: 0 0.3rem;
+  }
+
+  .volume input {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .themes {

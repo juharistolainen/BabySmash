@@ -26,7 +26,8 @@ There is no test suite in either the JS or the Rust code. You can only verify ma
 
 **Frontend (`src/`)**: SvelteKit runs as an SPA. `adapter-static` serves `index.html` as the fallback, and `+layout.ts` sets `ssr = false`. Almost all UI state and key handling is in `src/routes/+page.svelte`, which uses Svelte 5 runes (`$state`). Key listeners are registered in the capture phase. `src/lib/` holds:
 - `smash.ts`: generates bursts (shape, color, position)
-- `audio.ts`: a Web Audio pentatonic synth with no asset files. The `AudioContext` is resumed on the first user gesture.
+- `audio.ts`: a Web Audio synth with no asset files. Everything routes through a master gain (the volume preference) and a compressor. `playSmash` caps concurrent oscillators so key mashing can't clip. The `AudioContext` is resumed on the first user gesture, and the ambient bed (`setAmbient`) only starts after that; it pauses while the document is hidden.
+- `soundscapes.ts`: per-theme sound as data, `Record<ThemeId, Soundscape>` (a smash `VoiceSpec` plus an optional `AmbientSpec` bed). Adding a theme without a soundscape fails `npm run check`.
 - `babyLock.ts`: the only bridge to Rust. Each call checks `isTauri()` (looks for `__TAURI_INTERNALS__`) and falls back to the browser Fullscreen API when Tauri is absent.
 
 **Backend (`src-tauri/src/`)**:

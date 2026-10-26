@@ -6,15 +6,31 @@ export type ResolvedMode = "light" | "dark";
 export interface Preferences {
   mode: ColorMode;
   theme: ThemeId;
+  /** Background bed from the theme's soundscape. Off by default: continuous sound is opt-in. */
+  ambience: boolean;
+  /** Master volume, 0..1. */
+  volume: number;
+  /** Bottom-right controls panel minimised to a small reopen button. */
+  panelCollapsed: boolean;
 }
 
 // Keep in sync with the inline pre-paint script in src/app.html.
 const PREFS_KEY = "babysmash-preferences";
 
-export const DEFAULT_PREFERENCES: Preferences = { mode: "system", theme: "default" };
+export const DEFAULT_PREFERENCES: Preferences = {
+  mode: "system",
+  theme: "default",
+  ambience: false,
+  volume: 0.8,
+  panelCollapsed: false,
+};
 
 function isColorMode(value: unknown): value is ColorMode {
   return value === "system" || value === "light" || value === "dark";
+}
+
+function isVolume(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 /** localStorage (not sessionStorage like lock intent): preferences should survive relaunches. */
@@ -24,6 +40,12 @@ export function loadPreferences(): Preferences {
     return {
       mode: isColorMode(raw?.mode) ? raw.mode : DEFAULT_PREFERENCES.mode,
       theme: isThemeId(raw?.theme) ? raw.theme : DEFAULT_PREFERENCES.theme,
+      ambience: typeof raw?.ambience === "boolean" ? raw.ambience : DEFAULT_PREFERENCES.ambience,
+      volume: isVolume(raw?.volume) ? raw.volume : DEFAULT_PREFERENCES.volume,
+      panelCollapsed:
+        typeof raw?.panelCollapsed === "boolean"
+          ? raw.panelCollapsed
+          : DEFAULT_PREFERENCES.panelCollapsed,
     };
   } catch {
     return { ...DEFAULT_PREFERENCES };

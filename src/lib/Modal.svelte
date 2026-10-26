@@ -57,6 +57,7 @@
   .modal {
     width: min(520px, calc(100vw - 2rem));
     max-height: calc(100vh - 2rem);
+    overflow-y: auto;
     padding: 0;
     border: 2px solid var(--panel-border);
     border-radius: 22px;
