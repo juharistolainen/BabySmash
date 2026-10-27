@@ -1,6 +1,6 @@
 [package]
 name = "babysmash"
-version = "1.0.0"
+version = "1.0.1"
 description = "BabySmash — keyboard smash play for babies"
 authors = ["BabySmash"]
 edition = "2021"
